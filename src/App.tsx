@@ -4,6 +4,7 @@ import Typography from "@mui/material/Typography";
 import axios from "axios";
 import Papa from "papaparse";
 import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { parse } from "csv-parse";
 import "./App.css";
 import {
   Alert,
@@ -17,6 +18,8 @@ import {
 } from "@mui/material";
 import MaterialTable from "./MaterialTable";
 import { io } from "socket.io-client";
+import PublishedPostsTable from "./Components/PublishedPostsTable";
+import CredsDropDown from "./Components/CredsDropDown";
 function App() {
   const [timeIntervalModal, setTimeIntervalModal] = useState(false);
   const [credentialModal, setcredentialModal] = useState(false);
@@ -97,7 +100,7 @@ function App() {
       renderHeader: () => (
         <Checkbox
           checked={headerCheck}
-          onChange={(event: any) => {
+          onChange={(event) => {
             setHeaderCheck(!headerCheck);
             setData(
               data.map((e: any) => {
@@ -132,12 +135,15 @@ function App() {
       const username: any = localStorage.getItem("username");
       const password: any = localStorage.getItem("password");
       const url: any = localStorage.getItem("url");
-      const response: any = await axios.delete(`${url}/wp-json/wp/v2/posts/${value.id}`, {
-        auth: { username, password },
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
+      const response: any = await axios.delete(
+        `${url}/wp-json/wp/v2/posts/${value.id}`,
+        {
+          auth: { username, password },
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
       if (response.status === 200) {
         const newpublishedData = publishedPostsArray.filter(
           (item: any) => item.id !== value.id
@@ -168,25 +174,20 @@ function App() {
     }));
   };
 
-  const handleCredential = (e: any) => {
-    e.preventDefault();
+  const handleCredential = async () => {
     localStorage.removeItem("username");
     localStorage.removeItem("password");
     localStorage.removeItem("url");
     localStorage.setItem("username", formData.username);
     localStorage.setItem("password", formData.password);
     localStorage.setItem("url", formData.url);
-    setcredentialModal(false);
     setAlertMessage("Credentials saved.");
     setOpen(true);
   };
 
-  const handleTimeInteval = (e: any) => {
-    e.preventDefault();
+  const handleTimeInteval = () => {
     localStorage.removeItem("timeinterval");
-    console.log(timeIntervalForm, "interval form");
     localStorage.setItem("timeinterval", timeIntervalForm.timeinterval);
-    setTimeIntervalModal(false);
     setAlertMessage("Timer Interval set Successfully.");
     setOpen(true);
   };
@@ -212,10 +213,14 @@ function App() {
     const file: any = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
+      const newData: any = [];
       reader.onload = async (e: any) => {
         const data = e.target.result;
         Papa.parse(data, {
           complete: function (results) {
+            // console.log("results: ", results.data);
+            // debugger;
+            const tempdata = results.data;
             const header: any = results.data[0];
             const headers = header.map((header: any) =>
               header.replace(/["']/g, "").trim()
@@ -235,6 +240,7 @@ function App() {
             const av = formatted.map((e: any, i: any) => {
               return { ...e, Id: i, isChecked: true };
             });
+            // console.log(av, "---ac");
             setData(av);
           },
         });
@@ -246,14 +252,14 @@ function App() {
   };
 
   useEffect(() => {
-    const socket = io("ws://localhost:8000/", {
+    const socket = io("http:://localhost:8000/", {
       // const socket = io("wss://dev-api.sattu.ai/", {
       transports: ["websocket"],
     });
 
     // Listen for the "postPublished" event from the server
-    socket.on("postPublished", (data: any) => {
-      console.log("publishedPostsArray :: ", publishedPostsArray);
+    socket.on("postPublishedOncoStore", (data: any) => {
+      console.log("publishedPostsArray :: oncostore :: ", publishedPostsArray);
       setpublishedPostsArray((prevPublishedPostsArray: any) => [
         ...prevPublishedPostsArray,
         data,
@@ -275,15 +281,21 @@ function App() {
       } else setHeaderCheck(true);
     }
   };
-  const handleCellClick = (val: any) => { };
+  const handleCellClick = (val: any) => {};
+
+  const handleButtonClick = () => {};
 
   const validateWordPressCredentials = async (username: any, password: any) => {
     try {
-      const url: any = localStorage.getItem("url");
-      const response = await axios.post(url, { username, password });
+      const response = await axios.post(
+        "https://bookmyimports.com/wp-json/jwt-auth/v1/token",
+        { username, password }
+      );
 
+      // If the request is successful, the credentials are valid
       return true;
     } catch (error) {
+      // If there's an error, the credentials are invalid
       console.error("Invalid credentials", error);
       return false;
     }
@@ -301,8 +313,7 @@ function App() {
     console.log("dataArray :: ", dataArray);
     axios
       .post(
-        "https://dev-api.sattu.ai/dynamic-post-publish",
-        // "http://localhost:8000/dynamic-post-publish",
+        "https://dev-api.sattu.ai/dynamic-post-publish-oncostore",
         {
           baseurl,
           username,
@@ -319,16 +330,29 @@ function App() {
       .then((response) => {
         // const res: any = JSON.parse(response);
         console.log("response", response);
-
       });
+  };
 
+  const CustomCellRenderer = ({ value }: { value: any }) => {
+    return (
+      <div
+        style={{
+          overflowY: "auto",
+          maxHeight: "100%",
+          whiteSpace: "pre-wrap",
+          wordWrap: "break-word",
+        }}
+      >
+        {value}
+      </div>
+    );
   };
 
   return (
     <>
       <Snackbar
         open={open}
-        autoHideDuration={3000}
+        autoHideDuration={6000}
         onClose={() => setOpen(false)}
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
@@ -343,7 +367,9 @@ function App() {
           {alertmessage}
         </Alert>
       </Snackbar>
-
+      <div style={{ width: "80%", justifyContent: "center", display: "flex" }}>
+        <CredsDropDown />
+      </div>
       <div
         style={{
           display: "flex",
@@ -427,13 +453,34 @@ function App() {
               paginationModel: { page: 0, pageSize: 10 },
             },
           }}
-          pageSizeOptions={[5, 10, 15, 100]}
+          pageSizeOptions={[5, 10]}
         />
         <div style={{ marginTop: "20px" }}>
           <Button
             variant="contained"
             color="primary"
             onClick={() => {
+              handleButtonClick();
+
+              // validateWordPressCredentials(
+              //   "rahul.vijayamgmt@gmail.com",
+              //   "tBhR 6g4m xpIq GUJR 9Ce9 B7QF"
+              // ).then((isValid: any) => {
+              //   if (isValid) {
+              //     // console.log(isValid, "----valid");
+              //     // Continue with the post request using Axios
+              //     // Make sure to include the authentication token if needed
+              //     // axios.post(
+              //     //   "https://your-wordpress-site.com/wp-json/wp/v2/posts",
+              //     //   {
+              //     //     // Your post data
+              //     //   }
+              //     // );
+              //   } else {
+              //     // Handle invalid credentials
+              //     console.error("Invalid credentials. Unable to create post.");
+              //   }
+              // });
               sendApiRequest(0);
             }}
           >
@@ -466,8 +513,11 @@ function App() {
           color: "darkgrey",
           right: "1%",
         }}
-      ></div>
+      >
+        {/* <Typography variant="body1"> Powered by CloudsCube</Typography> */}
+      </div>
 
+      <PublishedPostsTable />
       {/* add credential */}
       <Modal
         aria-labelledby="transition-modal-title"
@@ -489,7 +539,7 @@ function App() {
               Set Credentials
             </Typography>
 
-            <form>
+            <form onSubmit={handleCredential}>
               <FormControl fullWidth margin="normal">
                 <TextField
                   label="Username"
@@ -527,17 +577,12 @@ function App() {
                   }}
                   name="url"
                   value={formData.url}
-                  placeholder="https://example.com"
+                  placeholder="https://example.com/wp-json/wp/v2/posts"
                   onChange={handleInputChange}
                   style={{ marginBottom: "20px" }}
                 />
               </FormControl>
-              <Button
-                onClick={handleCredential}
-                type="submit"
-                variant="contained"
-                color="primary"
-              >
+              <Button type="submit" variant="contained" color="primary">
                 Submit
               </Button>
             </form>
@@ -559,23 +604,18 @@ function App() {
               Set Time Interval
             </Typography>
 
-            <form>
+            <form onSubmit={handleTimeInteval}>
               <FormControl fullWidth margin="normal">
                 <TextField
                   label="Time Interval (secs)"
                   variant="outlined"
                   fullWidth
                   name="timeinterval"
-                  defaultValue={localStorage.getItem("timeinterval")}
+                  value={timeIntervalForm.timeinterval}
                   onChange={handleInputChangeTimeInteval}
                 />
               </FormControl>
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                onClick={handleTimeInteval}
-              >
+              <Button type="submit" variant="contained" color="primary">
                 Submit
               </Button>
             </form>
@@ -585,18 +625,5 @@ function App() {
     </>
   );
 }
-const CustomCellRenderer = ({ value }: { value: any }) => {
-  return (
-    <div
-      style={{
-        overflowY: "auto",
-        maxHeight: "100%",
-        whiteSpace: "pre-wrap",
-        wordWrap: "break-word",
-      }}
-    >
-      {value}
-    </div>
-  );
-};
+
 export default App;
